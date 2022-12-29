@@ -1,0 +1,25 @@
+#  Local .terraform directories
+.terraform/
+.terraform.lock.hcl
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# .tfvars files
+*.tfvars
+
+# cloudformation package
+package.yaml
+
+# tardigrade-ci
+.tardigrade-ci
+tardigrade-ci/
+
+# python cache
+__pycache__
+.python-version
+.pytest_cache
+
+# lambda builds
+builds/

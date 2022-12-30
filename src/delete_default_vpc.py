@@ -69,7 +69,7 @@ log = logging.getLogger(__name__)
 
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() == "true"
 ASSUME_ROLE_NAME = os.environ.get("ASSUME_ROLE_NAME", "OrganizationAccountAccessRole")
-MAX_WORKERS = int(os.getenv("MAX_WORKERS", 20))
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", "20"))
 
 # Get the Lambda session in the lambda context
 SESSION = boto3.Session()
@@ -83,7 +83,7 @@ class DeleteVPCResourcesError(Exception):
     """Delete VPC Resource Error."""
 
 
-def lambda_handler(event, context):  # pylint: disable=unused-argument
+def lambda_handler(event, context):  # pylint: disable=unused-argument, too-many-locals
     """Delete Default VPC in all regions.
 
     Assumes role to account and deletes default VPC resources in all regions
@@ -109,7 +109,8 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
             try:
                 ec2 = assumed_role_session.resource("ec2", region_name=region)
                 vpc_ids = get_default_vpc_ids(assumed_role_session, account_id, region)
-            except BaseException as bex:
+            except BaseException as exc:  # pylint: disable=broad-except
+                # Allow threads to continue on exception, but capture the error
                 vpc_ids = []
                 msg = "Error: Error getting vpc resource"
                 exception_list.append(
@@ -118,10 +119,10 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
                         region,
                         lambda_handler.__name__,
                         msg,
-                        bex,
+                        exc,
                     )
                 )
-                log.exception(bex)
+                log.exception(exc)
 
             for vpc_id in vpc_ids:
                 log.info(
@@ -133,7 +134,8 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
                 try:
                     vpc_resource = ec2.Vpc(vpc_id)
                     futures.append(executor.submit(del_vpc_all, vpc_resource, region))
-                except BaseException as bex:
+                except BaseException as exc:  # pylint: disable=broad-except
+                    # Allow threads to continue on exception, but capture the error
                     msg = "Error: Exception submitting del_vpc_all executor"
                     exception_list.append(
                         convert_exception_to_string(
@@ -141,16 +143,17 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
                             region,
                             lambda_handler.__name__,
                             msg,
-                            bex,
+                            exc,
                         )
                     )
-                    log.exception(bex)
+                    log.exception(exc)
     concurrent.futures.wait(futures)
     for fut in futures:
         try:
             fut.result()
-        except BaseException as ex:
-            exception_list.append(str(ex))
+        except BaseException as exc:  # pylint: disable=broad-except
+            # Allow threads to continue on exception, but capture the error
+            exception_list.append(str(exc))
 
     if exception_list:
         exception_list = "\r\r ".join(exception_list)
@@ -185,7 +188,7 @@ def get_account_id(event):
 
 
 def get_assumed_role_session(account_id):
-    # Get the config
+    """Get boto3 session."""
     role_arn = f"arn:{get_partition()}:iam::{account_id}:role/{ASSUME_ROLE_NAME}"
     role_session_name = generate_lambda_session_name()
 
@@ -209,13 +212,14 @@ def get_partition():
 
 
 def get_regions(assumed_role_session):
-    """Build a region list"""
+    """Build a region list."""
     client = assumed_role_session.client("ec2")
     regions = client.describe_regions()
     return [region["RegionName"] for region in regions["Regions"]]
 
 
 def get_default_vpc_ids(assumed_role_session, account_id, region):
+    """Get default VPC ID."""
     log.info("Retrieve VPCs for account %s region %s", account_id, region)
     client = assumed_role_session.client("ec2", region_name=region)
     vpcs = client.describe_vpcs(
@@ -232,7 +236,7 @@ def get_default_vpc_ids(assumed_role_session, account_id, region):
 
 
 def del_igw(vpc):
-    """Detach and delete the internet-gateway"""
+    """Detach and delete the internet-gateway."""
     igws = None
     vpc_id = vpc["id"]
 
@@ -248,7 +252,7 @@ def del_igw(vpc):
 
 
 def del_sub(vpc):
-    """Delete the subnets"""
+    """Delete the subnets."""
     subnets = vpc["resource"].subnets.all()
     default_subnets = [subnet for subnet in subnets if subnet.default_for_az]
 
@@ -261,7 +265,7 @@ def del_sub(vpc):
 
 
 def del_rtb(vpc):
-    """Delete the route-tables"""
+    """Delete the route-tables."""
     rtbs = vpc["resource"].route_tables.all()
     if not rtbs:
         log.info("There are no rtbs for vpcid %s ", vpc["id"])
@@ -276,7 +280,7 @@ def del_rtb(vpc):
 
 
 def del_acl(vpc):
-    """Delete the network-access-lists"""
+    """Delete the network-access-lists."""
     acls = vpc["resource"].network_acls.all()
     if not acls:
         log.info("There are no acls for vpcid %s ", vpc["id"])
@@ -290,29 +294,29 @@ def del_acl(vpc):
 
 
 def del_sgp(vpc):
-    """Delete any security-groups"""
-    sgps = vpc["resource"].security_groups.all()
-    if not sgps:
-        log.info("There are no sgps for vpcid %s ", vpc["id"])
+    """Delete any security-groups."""
+    security_groups = vpc["resource"].security_groups.all()
+    if not security_groups:
+        log.info("There are no security groups for vpcid %s ", vpc["id"])
 
-    for sg in sgps:
-        if sg.group_name == "default":
-            log.info("%s is the default security group, continue...", sg.id)
+    for security_group in security_groups:
+        if security_group.group_name == "default":
+            log.info("%s is the default security group, continue...", security_group.id)
             continue
-        log.info("Removing sg: %s", sg.id)
-        sg.delete(DryRun=DRY_RUN)
+        log.info("Removing sg: %s", security_group.id)
+        security_group.delete(DryRun=DRY_RUN)
 
 
 def del_vpc(vpc):
-    """Delete the VPC"""
+    """Delete the VPC."""
     vpc_id = vpc["id"]
     log.info("Removing vpc-id: %s", vpc_id)
     vpc["resource"].delete(DryRun=DRY_RUN)
 
 
 def del_vpc_all(vpc_resource, region):
-    """
-    Do the work - order of operation
+    """Do the work - order of operation.
+
     1.) Delete the internet-gateway
     2.) Delete subnets
     3.) Delete route-tables
@@ -332,33 +336,39 @@ def del_vpc_all(vpc_resource, region):
 
     try:
         del_igw(vpc)
-    except BaseException as ex:
-        exception_list.append(process_exception(vpc, "del_igw", ex))
+    except BaseException as exc:  # pylint: disable=broad-except
+        # Allow threads to continue on exception, but capture the error
+        exception_list.append(process_exception(vpc, "del_igw", exc))
 
     try:
         del_sub(vpc)
-    except BaseException as ex:
-        exception_list.append(process_exception(vpc, "del_sub", ex))
+    except BaseException as exc:  # pylint: disable=broad-except
+        # Allow threads to continue on exception, but capture the error
+        exception_list.append(process_exception(vpc, "del_sub", exc))
 
     try:
         del_rtb(vpc)
-    except BaseException as ex:
-        exception_list.append(process_exception(vpc, "del_rtb", ex))
+    except BaseException as exc:  # pylint: disable=broad-except
+        # Allow threads to continue on exception, but capture the error
+        exception_list.append(process_exception(vpc, "del_rtb", exc))
 
     try:
         del_acl(vpc)
-    except BaseException as ex:
-        exception_list.append(process_exception(vpc, "del_acl", ex))
+    except BaseException as exc:  # pylint: disable=broad-except
+        # Allow threads to continue on exception, but capture the error
+        exception_list.append(process_exception(vpc, "del_acl", exc))
 
     try:
         del_sgp(vpc)
-    except BaseException as ex:
-        exception_list.append(process_exception(vpc, "del_sgp", ex))
+    except BaseException as exc:  # pylint: disable=broad-except
+        # Allow threads to continue on exception, but capture the error
+        exception_list.append(process_exception(vpc, "del_sgp", exc))
 
     try:
         del_vpc(vpc)
-    except BaseException as ex:
-        exception_list.append(process_exception(vpc, "del_vpc", ex))
+    except BaseException as exc:  # pylint: disable=broad-except
+        # Allow threads to continue on exception, but capture the error
+        exception_list.append(process_exception(vpc, "del_vpc", exc))
 
     if exception_list:
         exception_list = "\r\r ".join(exception_list)
@@ -371,10 +381,12 @@ def del_vpc_all(vpc_resource, region):
 
 
 def get_error_prefix(account_id, region, method_name):
+    """Get prefix for error message."""
     return f"Account: {account_id}\r Region: {region}\r Method: {method_name}"
 
 
 def convert_exception_to_string(account_id, region, method_name, msg, exception):
+    """Convert exception to string."""
     error_str = get_error_prefix(account_id, region, method_name)
     if msg:
         error_str = f"{error_str}\r Error:{msg}\r"
@@ -383,6 +395,7 @@ def convert_exception_to_string(account_id, region, method_name, msg, exception)
 
 
 def process_exception(vpc, method_name, exception):
+    """Handle exceptions and return error string."""
     error_str = convert_exception_to_string(
         vpc["account_id"], vpc["region"], method_name, None, exception
     )

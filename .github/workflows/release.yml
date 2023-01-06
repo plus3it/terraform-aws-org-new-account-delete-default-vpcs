@@ -30,7 +30,7 @@ jobs:
         run: |
           set -eu -o pipefail
           RELEASE=false
-          PRIOR_VERSION=$(git describe --abbrev=0 --tags)
+          PRIOR_VERSION=$(git describe --abbrev=0 --tags || true)
           RELEASE_VERSION=$(grep current_version .bumpversion.cfg | sed 's/^.*= //' )
           if [[ "$PRIOR_VERSION" != "$RELEASE_VERSION" ]]; then RELEASE=true; fi
           echo "condition=${RELEASE}"

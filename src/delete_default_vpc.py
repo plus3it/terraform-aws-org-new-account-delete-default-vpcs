@@ -126,7 +126,6 @@ def get_account_id(event):
 
 def get_assumed_role_session(account_id, role_arn):
     """Get boto3 session."""
-
     function_name = os.environ.get(
         "AWS_LAMBDA_FUNCTION_NAME", os.path.basename(__file__)
     )
@@ -348,7 +347,7 @@ def process_exception(vpc, method_name, exception):
 
 
 def cli_main(target_account_id, assume_role_arn=None, assume_role_name=None):
-    """Main method with calling from the CLI - processes assume role args"""
+    """Process cli assume_role_name arg and pass to main."""
     log.debug(
         "CLI - target_account_id=%s assume_role_arn=%s assume_role_name=%s",
         target_account_id,
@@ -366,7 +365,7 @@ def cli_main(target_account_id, assume_role_arn=None, assume_role_name=None):
 
 
 def main(target_account_id, assume_role_arn):
-    # Log the default session identity
+    """Assume role and concurrently delete default vpc resources."""
     log.debug(
         "Main identity is %s",
         SESSION.client("sts").get_caller_identity()["Arn"],
@@ -376,6 +375,30 @@ def main(target_account_id, assume_role_arn):
 
     regions = get_regions(assumed_role_session)
 
+    exception_list = concurrently_delete_vpcs(
+        assumed_role_session,
+        target_account_id,
+        regions,
+    )
+
+    if exception_list:
+        exception_list = "\r\r ".join(exception_list)
+        exception_str = f"All Exceptions encountered:\r\r{exception_list}\r\r"
+        log.error(exception_str)
+        raise DeleteVPCError(Exception(exception_str))
+
+    if DRY_RUN:
+        log.debug("Dry Run listed all resources that would be deleted")
+    else:
+        log.debug("Deleted all default VPCs and associated resources")
+
+
+def concurrently_delete_vpcs(
+    assumed_role_session,
+    target_account_id,
+    regions,
+):
+    """Create worker threads and deletes vpc resources."""
     exception_list = []
     futures = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -431,16 +454,7 @@ def main(target_account_id, assume_role_arn):
             # Allow threads to continue on exception, but capture the error
             exception_list.append(str(exc))
 
-    if exception_list:
-        exception_list = "\r\r ".join(exception_list)
-        exception_str = f"All Exceptions encountered:\r\r{exception_list}\r\r"
-        log.error(exception_str)
-        raise DeleteVPCError(Exception(exception_str))
-
-    if DRY_RUN:
-        log.debug("Dry Run listed all resources that would be deleted")
-    else:
-        log.debug("Deleted all default VPCs and associated resources")
+    return exception_list
 
 
 if __name__ == "__main__":

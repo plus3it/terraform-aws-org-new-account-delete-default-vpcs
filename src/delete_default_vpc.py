@@ -348,8 +348,9 @@ def process_exception(vpc, method_name, exception):
 
 
 def cli_main(target_account_id, assume_role_arn=None, assume_role_name=None):
+    """Main method with calling from the CLI - processes assume role args"""
     log.debug(
-        "CLI option values are target_account_id=%s assume_role_arn=%s assume_role_name=%s",
+        "CLI - target_account_id=%s assume_role_arn=%s assume_role_name=%s",
         target_account_id,
         assume_role_arn,
         assume_role_name,

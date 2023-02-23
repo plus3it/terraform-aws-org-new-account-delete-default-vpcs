@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### 1.0.1
 
-**Commit Delta**: [Change from 1.1.1 release](https://github.com/plus3it/terraform-aws-org-new-account-delete-default-vpcs/compare/1.0.0...1.0.1)
+**Commit Delta**: [Change from 1.0.0 release](https://github.com/plus3it/terraform-aws-org-new-account-delete-default-vpcs/compare/1.0.0...1.0.1)
 
 **Released**: 2023.02.23
 

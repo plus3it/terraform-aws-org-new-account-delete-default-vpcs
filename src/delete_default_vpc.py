@@ -28,10 +28,12 @@ Environment Variables:
     MAX_WORKERS: (optional) # of workers to process resources, default 20
 
 """
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
 import collections
 import concurrent.futures
 import logging
 import os
+import sys
 
 import boto3
 from aws_assume_role_lib import (  # type: ignore
@@ -83,88 +85,22 @@ class DeleteVPCResourcesError(Exception):
     """Delete VPC Resource Error."""
 
 
+class DeleteDefaultVPCInvalidArgsError(Exception):
+    """Invalid arguments were used to delete VPCs."""
+
+
 def lambda_handler(event, context):  # pylint: disable=unused-argument, too-many-locals
     """Delete Default VPC in all regions.
 
     Assumes role to account and deletes default VPC resources in all regions
+    Entrypoint if triggered via lambda
     """
     log.debug("AWS Event:%s", event)
 
     account_id = get_account_id(event)
+    role_arn = f"arn:{get_partition()}:iam::{account_id}:role/{ASSUME_ROLE_NAME}"
 
-    # do stuff with the Lambda role using SESSION
-    log.debug(
-        "Main identity is %s",
-        SESSION.client("sts").get_caller_identity()["Arn"],
-    )
-
-    assumed_role_session = get_assumed_role_session(account_id)
-
-    regions = get_regions(assumed_role_session)
-
-    exception_list = []
-    futures = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        for region in regions:
-            try:
-                ec2 = assumed_role_session.resource("ec2", region_name=region)
-                vpc_ids = get_default_vpc_ids(assumed_role_session, account_id, region)
-            except BaseException as exc:  # pylint: disable=broad-except
-                # Allow threads to continue on exception, but capture the error
-                vpc_ids = []
-                msg = "Error: Error getting vpc resource"
-                exception_list.append(
-                    convert_exception_to_string(
-                        account_id,
-                        region,
-                        lambda_handler.__name__,
-                        msg,
-                        exc,
-                    )
-                )
-                log.exception(exc)
-
-            for vpc_id in vpc_ids:
-                log.info(
-                    "Processing Account: %s Region: %s and VPC Id: %s",
-                    account_id,
-                    region,
-                    vpc_id,
-                )
-                try:
-                    vpc_resource = ec2.Vpc(vpc_id)
-                    futures.append(executor.submit(del_vpc_all, vpc_resource, region))
-                except BaseException as exc:  # pylint: disable=broad-except
-                    # Allow threads to continue on exception, but capture the error
-                    msg = "Error: Exception submitting del_vpc_all executor"
-                    exception_list.append(
-                        convert_exception_to_string(
-                            account_id,
-                            region,
-                            lambda_handler.__name__,
-                            msg,
-                            exc,
-                        )
-                    )
-                    log.exception(exc)
-    concurrent.futures.wait(futures)
-    for fut in futures:
-        try:
-            fut.result()
-        except BaseException as exc:  # pylint: disable=broad-except
-            # Allow threads to continue on exception, but capture the error
-            exception_list.append(str(exc))
-
-    if exception_list:
-        exception_list = "\r\r ".join(exception_list)
-        exception_str = f"All Exceptions encountered:\r\r{exception_list}\r\r"
-        log.error(exception_str)
-        raise DeleteVPCError(Exception(exception_str))
-
-    if DRY_RUN:
-        log.debug("Dry Run listed all resources that would be deleted")
-    else:
-        log.debug("Deleted all default VPCs and associated resources")
+    main(account_id, role_arn, DRY_RUN)
 
 
 def get_new_account_id(event):
@@ -187,9 +123,9 @@ def get_account_id(event):
     return get_account_id_strategy[event_name](event)
 
 
-def get_assumed_role_session(account_id):
+def get_assumed_role_session(account_id, role_arn):
     """Get boto3 session."""
-    role_arn = f"arn:{get_partition()}:iam::{account_id}:role/{ASSUME_ROLE_NAME}"
+
     role_session_name = generate_lambda_session_name()
 
     # Assume the session
@@ -404,3 +340,121 @@ def process_exception(vpc, method_name, exception):
     log.exception(exception)
 
     return error_str
+
+
+def main(account_id, assume_role_arn, dry_run=True):
+    # do stuff with the Lambda role using SESSION
+    log.debug(
+        "Main identity is %s",
+        SESSION.client("sts").get_caller_identity()["Arn"],
+    )
+
+    assumed_role_session = get_assumed_role_session(
+        account_id, assume_role_arn, dry_run
+    )
+
+    regions = get_regions(assumed_role_session)
+
+    exception_list = []
+    futures = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        for region in regions:
+            try:
+                ec2 = assumed_role_session.resource("ec2", region_name=region)
+                vpc_ids = get_default_vpc_ids(assumed_role_session, account_id, region)
+            except BaseException as exc:  # pylint: disable=broad-except
+                # Allow threads to continue on exception, but capture the error
+                vpc_ids = []
+                msg = "Error: Error getting vpc resource"
+                exception_list.append(
+                    convert_exception_to_string(
+                        account_id,
+                        region,
+                        lambda_handler.__name__,
+                        msg,
+                        exc,
+                    )
+                )
+                log.exception(exc)
+
+            for vpc_id in vpc_ids:
+                log.info(
+                    "Processing Account: %s Region: %s and VPC Id: %s",
+                    account_id,
+                    region,
+                    vpc_id,
+                )
+                try:
+                    vpc_resource = ec2.Vpc(vpc_id)
+                    futures.append(executor.submit(del_vpc_all, vpc_resource, region))
+                except BaseException as exc:  # pylint: disable=broad-except
+                    # Allow threads to continue on exception, but capture the error
+                    msg = "Error: Exception submitting del_vpc_all executor"
+                    exception_list.append(
+                        convert_exception_to_string(
+                            account_id,
+                            region,
+                            lambda_handler.__name__,
+                            msg,
+                            exc,
+                        )
+                    )
+                    log.exception(exc)
+    concurrent.futures.wait(futures)
+    for fut in futures:
+        try:
+            fut.result()
+        except BaseException as exc:  # pylint: disable=broad-except
+            # Allow threads to continue on exception, but capture the error
+            exception_list.append(str(exc))
+
+    if exception_list:
+        exception_list = "\r\r ".join(exception_list)
+        exception_str = f"All Exceptions encountered:\r\r{exception_list}\r\r"
+        log.error(exception_str)
+        raise DeleteVPCError(Exception(exception_str))
+
+    if DRY_RUN:
+        log.debug("Dry Run listed all resources that would be deleted")
+    else:
+        log.debug("Deleted all default VPCs and associated resources")
+
+
+if __name__ == "__main__":
+
+    def create_args():
+        """Return parsed arguments."""
+        parser = ArgumentParser(
+            formatter_class=RawDescriptionHelpFormatter,
+            description="""
+Delete Default VPC for all supported regions and accounts.
+NOTE:  Use the environment variable 'LOG_LEVEL' to set the desired log level
+('error', 'warning', 'info' or 'debug').  The default level is 'info'.
+
+Use the environment variable 'MAX_WORKERS' to set the max number of worker threads
+to run simultaneously. The default number is 20.
+""",
+        )
+        required_args = parser.add_argument_group("required named arguments")
+        required_args.add_argument(
+            "--target-account-id",
+            required=True,
+            type=str,
+            help="Account number to delete default VPC resources in",
+        )
+        parser.add_argument(
+            "--assume-role-arn",
+            required=True,
+            type=str,
+            help="ARN of IAM role to assume the target account (case sensitive)",
+        )
+        required_args.add_argument(
+            "--dry-run",
+            required=False,
+            type=bool,
+            default=DRY_RUN,
+            help="Dry run or not, defaults to True",
+        )
+        return parser.parse_args()
+
+    sys.exit(main(**vars(create_args())))

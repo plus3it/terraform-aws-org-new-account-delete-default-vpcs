@@ -98,9 +98,10 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument, too-many
     log.debug("AWS Event:%s", event)
 
     account_id = get_account_id(event)
-    role_arn = f"arn:{get_partition()}:iam::{account_id}:role/{ASSUME_ROLE_NAME}"
 
-    main(account_id, role_arn, DRY_RUN)
+    assume_role_arn = f"arn:{get_partition()}:iam::{account_id}:role/{ASSUME_ROLE_NAME}"
+
+    main(account_id, assume_role_arn)
 
 
 def get_new_account_id(event):
@@ -126,7 +127,11 @@ def get_account_id(event):
 def get_assumed_role_session(account_id, role_arn):
     """Get boto3 session."""
 
-    role_session_name = generate_lambda_session_name()
+    function_name = os.environ.get(
+        "AWS_LAMBDA_FUNCTION_NAME", os.path.basename(__file__)
+    )
+
+    role_session_name = generate_lambda_session_name(function_name)
 
     # Assume the session
     assumed_role_session = assume_role(
@@ -342,16 +347,31 @@ def process_exception(vpc, method_name, exception):
     return error_str
 
 
-def main(account_id, assume_role_arn, dry_run=True):
-    # do stuff with the Lambda role using SESSION
+def cli_main(target_account_id, assume_role_arn=None, assume_role_name=None):
+    log.debug(
+        "CLI option values are target_account_id=%s assume_role_arn=%s assume_role_name=%s",
+        target_account_id,
+        assume_role_arn,
+        assume_role_name,
+    )
+
+    if assume_role_name:
+        assume_role_arn = (
+            f"arn:{get_partition()}:iam::{target_account_id}:role/{assume_role_name}"
+        )
+        log.info("assume_role_arn for provided role name is '%s'", assume_role_arn)
+
+    main(target_account_id, assume_role_arn)
+
+
+def main(target_account_id, assume_role_arn):
+    # Log the default session identity
     log.debug(
         "Main identity is %s",
         SESSION.client("sts").get_caller_identity()["Arn"],
     )
 
-    assumed_role_session = get_assumed_role_session(
-        account_id, assume_role_arn, dry_run
-    )
+    assumed_role_session = get_assumed_role_session(target_account_id, assume_role_arn)
 
     regions = get_regions(assumed_role_session)
 
@@ -361,14 +381,16 @@ def main(account_id, assume_role_arn, dry_run=True):
         for region in regions:
             try:
                 ec2 = assumed_role_session.resource("ec2", region_name=region)
-                vpc_ids = get_default_vpc_ids(assumed_role_session, account_id, region)
+                vpc_ids = get_default_vpc_ids(
+                    assumed_role_session, target_account_id, region
+                )
             except BaseException as exc:  # pylint: disable=broad-except
                 # Allow threads to continue on exception, but capture the error
                 vpc_ids = []
                 msg = "Error: Error getting vpc resource"
                 exception_list.append(
                     convert_exception_to_string(
-                        account_id,
+                        target_account_id,
                         region,
                         lambda_handler.__name__,
                         msg,
@@ -380,7 +402,7 @@ def main(account_id, assume_role_arn, dry_run=True):
             for vpc_id in vpc_ids:
                 log.info(
                     "Processing Account: %s Region: %s and VPC Id: %s",
-                    account_id,
+                    target_account_id,
                     region,
                     vpc_id,
                 )
@@ -392,7 +414,7 @@ def main(account_id, assume_role_arn, dry_run=True):
                     msg = "Error: Exception submitting del_vpc_all executor"
                     exception_list.append(
                         convert_exception_to_string(
-                            account_id,
+                            target_account_id,
                             region,
                             lambda_handler.__name__,
                             msg,
@@ -427,12 +449,18 @@ if __name__ == "__main__":
         parser = ArgumentParser(
             formatter_class=RawDescriptionHelpFormatter,
             description="""
-Delete Default VPC for all supported regions and accounts.
-NOTE:  Use the environment variable 'LOG_LEVEL' to set the desired log level
-('error', 'warning', 'info' or 'debug').  The default level is 'info'.
+Delete Default VPC for all supported regions for provided target account.
 
-Use the environment variable 'MAX_WORKERS' to set the max number of worker threads
-to run simultaneously. The default number is 20.
+Supported Environment Variables:
+    'LOG_LEVEL': defaults to 'info'
+        - set the desired log level ('error', 'warning', 'info' or 'debug')
+
+    'DRY_RUN': defaults to 'true'
+        - set whether actions should be simulated or live
+        - value of 'true' (case insensitive) will be simulated.
+
+    'MAX_WORKERS': defaults to '20'
+        -sets max number of worker threads to run simultaneously.
 """,
         )
         required_args = parser.add_argument_group("required named arguments")
@@ -442,19 +470,18 @@ to run simultaneously. The default number is 20.
             type=str,
             help="Account number to delete default VPC resources in",
         )
-        parser.add_argument(
+        mut_x_group = parser.add_mutually_exclusive_group(required=True)
+        mut_x_group.add_argument(
             "--assume-role-arn",
-            required=True,
             type=str,
-            help="ARN of IAM role to assume the target account (case sensitive)",
+            help="ARN of IAM role to assume in the target account (case sensitive)",
         )
-        required_args.add_argument(
-            "--dry-run",
-            required=False,
-            type=bool,
-            default=DRY_RUN,
-            help="Dry run or not, defaults to True",
+        mut_x_group.add_argument(
+            "--assume-role-name",
+            type=str,
+            help="Name of IAM role to assume in the target account (case sensitive)",
         )
+
         return parser.parse_args()
 
-    sys.exit(main(**vars(create_args())))
+    sys.exit(cli_main(**vars(create_args())))

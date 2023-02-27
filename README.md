@@ -48,3 +48,54 @@ default VPC in every region for that account.
 No outputs.
 
 <!-- END TFDOCS -->
+
+## CLI Option
+
+Steps to run via the CLI
+
+1. Install and configure aws cli.
+2. Set AWS_PROFILE and AWS_DEFAULT_REGION (account and region that can assume the role and run commands from)
+3. Review the options for the script and run
+
+### Script Options
+
+```bash
+Supported Environment Variables:
+    'LOG_LEVEL': defaults to 'info'
+        - set the desired log level ('error', 'warning', 'info' or 'debug')
+
+    'DRY_RUN': defaults to 'true'
+        - set whether actions should be simulated or live
+        - value of 'true' (case insensitive) will be simulated.
+
+    'MAX_WORKERS': defaults to '20'
+        -sets max number of worker threads to run simultaneously.
+
+options:
+  -h, --help            show this help message and exit
+
+required arguments:
+  --target-account-id TARGET_ACCOUNT_ID
+                        Account number to delete default VPC resources in
+
+  --assume-role-arn ASSUME_ROLE_ARN
+                        ARN of IAM role to assume in the target account (case sensitive)
+  OR
+  --assume-role-name ASSUME_ROLE_NAME
+                        Name of IAM role to assume in the target account (case sensitive)
+
+usage: delete_default_vpc.py [-h] --target-account-id TARGET_ACCOUNT_ID (--assume-role-arn ASSUME_ROLE_ARN | --assume-role-name ASSUME_ROLE_NAME)
+```
+
+### Sample steps to execute in venv
+
+```bash
+mkdir vpc_env
+python3 -m venv vpc_env
+source vpc_env/bin/activate
+python3 -m pip install -U pip
+pip3 install -r src/requirements.txt
+python3 src/delete_default_vpc.py --target-account-id=<TARGET ACCT ID> (--assume-role-arn=<ROLE ARN TO ASSUME> | --assume-role-name=<ROLE NAME TO ASSUME>)
+deactivate
+rm -rf vpc_env
+```

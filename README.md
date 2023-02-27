@@ -54,7 +54,7 @@ No outputs.
 Steps to run via the CLI
 
 1. Install and configure aws cli.
-2. Set AWS_DEFAULT_PROFILE and AWS_DEFAULT_REGION (account and region that can assume the role and run commands from)
+2. Set AWS_PROFILE and AWS_DEFAULT_REGION (account and region that can assume the role and run commands from)
 3. Review the options for the script and run
 
 ### Script Options

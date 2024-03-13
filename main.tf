@@ -2,7 +2,7 @@
 # Lambda
 ##############################
 module "lambda" {
-  source = "git::https://github.com/terraform-aws-modules/terraform-aws-lambda.git?ref=v7.2.1"
+  source = "git::https://github.com/terraform-aws-modules/terraform-aws-lambda.git?ref=v7.2.2"
 
   function_name = "${var.project_name}-delete-default-vpc"
 

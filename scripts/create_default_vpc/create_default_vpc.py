@@ -1,4 +1,5 @@
 """Scripte to create Default VPC in all regions."""
+
 import concurrent.futures
 import sys
 

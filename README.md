@@ -71,6 +71,10 @@ Supported Environment Variables:
     'MAX_WORKERS': defaults to '20'
         -sets max number of worker threads to run simultaneously.
 
+    'AWS_STS_REGIONAL_ENDPOINTS': defaults to 'regional'
+        -sets AWS STS endpoint resolution logic for boto3.
+        - helpful when using opt-in AWS regions
+
 options:
   -h, --help            show this help message and exit
 

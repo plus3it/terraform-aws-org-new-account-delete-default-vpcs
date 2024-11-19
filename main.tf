@@ -41,7 +41,7 @@ module "lambda" {
     ASSUME_ROLE_NAME           = var.assume_role_name
     DRY_RUN                    = var.dry_run
     MAX_WORKERS                = var.max_workers
-    AWS_STS_REGIONAL_ENDPOINTS = var.aws_sts_regiona_endpoints
+    AWS_STS_REGIONAL_ENDPOINTS = var.aws_sts_regional_endpoints
   }
 }
 

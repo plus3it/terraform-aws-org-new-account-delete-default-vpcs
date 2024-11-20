@@ -72,6 +72,16 @@ variable "max_workers" {
   default     = 20
 }
 
+variable "aws_sts_regional_endpoints" {
+  description = "Sets AWS STS endpoint resolution logic for boto3."
+  type        = string
+  default     = "regional"
+  validation {
+    condition     = contains(["regional", "legacy"], var.aws_sts_regional_endpoints)
+    error_message = "Valid values for aws sts regional endpoints are (regional, legacy)."
+  }
+}
+
 variable "tags" {
   description = "Tags for resource"
   type        = map(string)

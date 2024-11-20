@@ -37,10 +37,11 @@ module "lambda" {
   ]
 
   environment_variables = {
-    LOG_LEVEL        = var.log_level
-    ASSUME_ROLE_NAME = var.assume_role_name
-    DRY_RUN          = var.dry_run
-    MAX_WORKERS      = var.max_workers
+    LOG_LEVEL                  = var.log_level
+    ASSUME_ROLE_NAME           = var.assume_role_name
+    DRY_RUN                    = var.dry_run
+    MAX_WORKERS                = var.max_workers
+    AWS_STS_REGIONAL_ENDPOINTS = var.aws_sts_regional_endpoints
   }
 }
 

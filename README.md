@@ -35,6 +35,7 @@ default VPC in every region for that account.
 |------|-------------|------|---------|:--------:|
 | <a name="input_project_name"></a> [project\_name](#input\_project\_name) | Project name to prefix resources with | `string` | n/a | yes |
 | <a name="input_assume_role_name"></a> [assume\_role\_name](#input\_assume\_role\_name) | Name of the IAM role that the lambda will assume in the target account | `string` | `"OrganizationAccountAccessRole"` | no |
+| <a name="input_aws_sts_regional_endpoints"></a> [aws\_sts\_regional\_endpoints](#input\_aws\_sts\_regional\_endpoints) | Sets AWS STS endpoint resolution logic for boto3. | `string` | `"regional"` | no |
 | <a name="input_dry_run"></a> [dry\_run](#input\_dry\_run) | Boolean toggle to control the dry-run mode of the lambda function | `bool` | `true` | no |
 | <a name="input_event_bus_name"></a> [event\_bus\_name](#input\_event\_bus\_name) | Event bus name to create event rules in | `string` | `"default"` | no |
 | <a name="input_event_types"></a> [event\_types](#input\_event\_types) | Event types that will trigger this lambda | `set(string)` | <pre>[<br>  "CreateAccountResult",<br>  "InviteAccountToOrganization"<br>]</pre> | no |
@@ -70,6 +71,10 @@ Supported Environment Variables:
 
     'MAX_WORKERS': defaults to '20'
         -sets max number of worker threads to run simultaneously.
+
+    'AWS_STS_REGIONAL_ENDPOINTS': defaults to 'regional'
+        -sets AWS STS endpoint resolution logic for boto3.
+        - helpful when using opt-in AWS regions
 
 options:
   -h, --help            show this help message and exit

@@ -87,6 +87,15 @@ locals {
         }
       }
     )
+    EnableOptInRegion = jsonencode(
+      {
+        "source" : ["aws.account"],
+        "detail-type" : ["Region Opt-In Status Change"],
+        "detail" : {
+          "status" : ["Enabled"]
+        }
+      }
+    )
   }
 }
 

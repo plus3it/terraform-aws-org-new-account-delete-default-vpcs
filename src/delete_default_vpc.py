@@ -98,11 +98,13 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument, too-many
     """
     log.debug("AWS Event:%s", event)
 
-    account_id = get_account_id(event)
+    event_data = parse_event(event)
 
-    assume_role_arn = f"arn:{get_partition()}:iam::{account_id}:role/{ASSUME_ROLE_NAME}"
+    assume_role_arn = (
+        f"arn:{get_partition()}:iam::{event_data['account_id']}:role/{ASSUME_ROLE_NAME}"
+    )
 
-    main(account_id, assume_role_arn)
+    main(event_data["account_id"], assume_role_arn, event_data["regions"])
 
 
 def get_new_account_id(event):
@@ -115,14 +117,46 @@ def get_invite_account_id(event):
     return event["detail"]["requestParameters"]["target"]["id"]
 
 
-def get_account_id(event):
-    """Return account id for supported events."""
-    event_name = event["detail"]["eventName"]
-    get_account_id_strategy = {
+def get_enable_region_account_id(event):
+    """Return account id for enable region events."""
+    return event["detail"].get("accountId") or event["account"]
+
+
+def get_cloudtrail_event_name(event):
+    """Return event name for cloudtrail events."""
+    return event["detail"]["eventName"]
+
+
+def get_region_opt_in_regions(event):
+    """Return region name for region opt-in events."""
+    return [event["detail"]["regionName"]]
+
+
+def parse_event(event):
+    """Return event data for supported events."""
+    event_name_strategy = {
+        "AWS Service Event via CloudTrail": get_cloudtrail_event_name,
+        "Region Opt-In Status Change": lambda x: "EnableOptInRegion",
+    }
+
+    account_id_strategy = {
         "CreateAccountResult": get_new_account_id,
         "InviteAccountToOrganization": get_invite_account_id,
+        "EnableOptInRegion": get_enable_region_account_id,
     }
-    return get_account_id_strategy[event_name](event)
+
+    regions_strategy = {
+        "CreateAccountResult": lambda x: None,
+        "InviteAccountToOrganization": lambda x: None,
+        "EnableOptInRegion": get_region_opt_in_regions,
+    }
+
+    event_name = event_name_strategy[event["detail-type"]](event)
+
+    return {
+        "account_id": account_id_strategy[event_name](event),
+        "regions": regions_strategy[event_name](event),
+    }
 
 
 def get_assumed_role_session(account_id, role_arn):
@@ -365,7 +399,7 @@ def cli_main(target_account_id, assume_role_arn=None, assume_role_name=None):
     main(target_account_id, assume_role_arn)
 
 
-def main(target_account_id, assume_role_arn):
+def main(target_account_id, assume_role_arn, regions=None):
     """Assume role and concurrently delete default vpc resources."""
     log.debug(
         "Main identity is %s",
@@ -374,7 +408,7 @@ def main(target_account_id, assume_role_arn):
 
     assumed_role_session = get_assumed_role_session(target_account_id, assume_role_arn)
 
-    regions = get_regions(assumed_role_session)
+    regions = regions or get_regions(assumed_role_session)
 
     exception_list = concurrently_delete_vpcs(
         assumed_role_session,

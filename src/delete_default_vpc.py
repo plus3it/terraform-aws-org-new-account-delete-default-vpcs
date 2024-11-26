@@ -96,9 +96,10 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument, too-many
     Assumes role to account and deletes default VPC resources in all regions
     Entrypoint if triggered via lambda
     """
-    log.debug("AWS Event:%s", event)
+    log.debug("AWS Event: %s", event)
 
     event_data = parse_event(event)
+    log.info("Parsed event data: %s", event_data)
 
     assume_role_arn = (
         f"arn:{get_partition()}:iam::{event_data['account_id']}:role/{ASSUME_ROLE_NAME}"

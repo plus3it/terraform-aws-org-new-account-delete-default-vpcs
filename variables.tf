@@ -21,11 +21,19 @@ variable "event_types" {
   default = [
     "CreateAccountResult",
     "InviteAccountToOrganization",
+    "EnableOptInRegion",
   ]
 
   validation {
-    condition     = alltrue([for event in var.event_types : contains(["CreateAccountResult", "InviteAccountToOrganization"], event)])
-    error_message = "Supported event_types include only: CreateAccountResult, InviteAccountToOrganization"
+    condition = alltrue([for event in var.event_types : contains(
+      [
+        "CreateAccountResult",
+        "InviteAccountToOrganization",
+        "EnableOptInRegion"
+      ],
+      event
+    )])
+    error_message = "Supported event_types include only: CreateAccountResult, InviteAccountToOrganization, EnableOptInRegion"
   }
 }
 

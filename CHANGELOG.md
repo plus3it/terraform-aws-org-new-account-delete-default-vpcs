@@ -4,13 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+### [1.3.0](https://github.com/plus3it/terraform-aws-org-new-account-delete-default-vpcs/releases/tag/1.3.0)
+
+**Released**: 2024.11.26
+
+**Summary**:
+
+* Supports deleting default vpc when an opt-in region is enabled
+
 ### [1.2.0](https://github.com/plus3it/terraform-aws-org-new-account-delete-default-vpcs/releases/tag/1.2.0)
 
 **Released**: 2024.11.19
 
 **Summary**:
 
-* Adds aws_sts_regional_endpoints variable as function environment variable with default of 'regional' to direct boto3 to use regional sts endpoints.
+* Adds aws_sts_regional_endpoints variable as function environment variable with
+  default of 'regional' to direct boto3 to use regional sts endpoints.
 
 ### [1.1.1](https://github.com/plus3it/terraform-aws-org-new-account-delete-default-vpcs/releases/tag/1.1.1)
 

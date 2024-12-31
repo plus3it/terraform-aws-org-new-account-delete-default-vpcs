@@ -39,7 +39,7 @@ from aws_assume_role_lib import assume_role
 )
 def main(
     account_id, dry_run, debug, role_session_name, role_to_assume, max_workers
-):  # pylint: disable=too-many-arguments
+):  # pylint: disable=too-many-arguments,too-many-positional-arguments
     """Create default VPC in all regions."""
     partition = get_partition()
 
